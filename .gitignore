@@ -4,3 +4,4 @@ lab1_tester
 *.log
 foo.txt.yfs*
 tmprand
+*.tgz
