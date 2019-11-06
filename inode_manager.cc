@@ -45,11 +45,14 @@ block_manager::alloc_block()
    * note: you should mark the corresponding bit in block bitmap when alloc.
    * you need to think about which block you can start to be allocated.
    */
+  pthread_mutex_lock(&bitmap_mutex);
   for(int i = FILEBLOCK; i < BLOCK_NUM; i++)
     if(!using_blocks[i]){
       using_blocks[i] = 1;
+      pthread_mutex_unlock(&bitmap_mutex);
       return i;
     }
+  pthread_mutex_unlock(&bitmap_mutex);
   printf("\tim: error! alloc_block failed!\n");
   return 0;
 }
@@ -61,7 +64,9 @@ block_manager::free_block(uint32_t id)
    * your code goes here.
    * note: you should unmark the corresponding bit in the block bitmap when free.
    */
+  pthread_mutex_lock(&bitmap_mutex);
   using_blocks[id] = 0;
+  pthread_mutex_unlock(&bitmap_mutex);
   return;
 }
 
@@ -77,7 +82,7 @@ block_manager::block_manager()
   sb.size = BLOCK_SIZE * BLOCK_NUM;
   sb.nblocks = BLOCK_NUM;
   sb.ninodes = INODE_NUM;
-
+  pthread_mutex_init(&bitmap_mutex, NULL);
 }
 
 void
@@ -111,6 +116,7 @@ inode_manager::inode_manager()
     printf("\tim: error! alloc first inode %d, should be 1\n", root_dir);
     exit(0);
   }
+  pthread_mutex_init(&inotable_mutex, NULL);
 }
 
 /* Create a new file.
@@ -125,6 +131,7 @@ inode_manager::alloc_inode(uint32_t type)
    */
   static int inum = 0;
 
+  pthread_mutex_lock(&inotable_mutex);
   printf("\tim: alloc_inode %d\n", type);
   for(int i = 0; i < INODE_NUM; i++){
     inum = (inum + 1) % INODE_NUM;
@@ -142,6 +149,7 @@ inode_manager::alloc_inode(uint32_t type)
     }
     free(ino);
   }
+  pthread_mutex_unlock(&inotable_mutex);
 
   assert(inum != 0);
   return inum;
@@ -155,6 +163,7 @@ inode_manager::free_inode(uint32_t inum)
    * note: you need to check if the inode is already a freed one;
    * if not, clear it, and remember to write back to disk.
    */
+  pthread_mutex_lock(&inotable_mutex);
   printf("\tim: free_inode %d\n", inum);
   inode_t *ino = get_inode(inum);
   if(ino){
@@ -164,6 +173,7 @@ inode_manager::free_inode(uint32_t inum)
     put_inode(inum, ino);
     free(ino);
   }
+  pthread_mutex_unlock(&inotable_mutex);
 }
 
 
@@ -382,7 +392,8 @@ inode_manager::remove_file(uint32_t inum)
    */
   printf("\tim: remove_file %d\n", inum);
   inode_t *ino = get_inode(inum);
-  assert(ino);
+  if(!ino)
+    return;
 
   int block_num = ino->size == 0? 0 : (ino->size - 1)/BLOCK_SIZE + 1;
   for(int i = 0; i < block_num; i++)

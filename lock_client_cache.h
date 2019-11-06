@@ -26,10 +26,50 @@ class lock_client_cache : public lock_client {
   int rlock_port;
   std::string hostname;
   std::string id;
+
+  enum message {
+    EMPTY,
+    RETRY,
+    REVOKE
+  };
+
+  enum state {
+    NONE,
+    FREE,
+    LOCKED,
+    ACQUIRING,
+    RELEASING
+  };
+
+
+  struct thread {
+    pthread_cond_t cv;
+    thread() {
+      pthread_cond_init(&cv, NULL);
+    }
+  };
+
+  struct lockinfo {
+    state stat;
+    message msg;
+    std::list<thread *> thread_list;
+
+    lockinfo() {
+      stat = NONE;
+      msg = EMPTY;
+    }
+  };
+
+  pthread_mutex_t lockmutex;
+  std::map<lock_protocol::lockid_t, lockinfo *> lockmap;
+  lock_protocol::status wait_lock(lockinfo *,
+                                    lock_protocol::lockid_t,
+                                    thread *latest_thread);
+  
  public:
   static int last_port;
   lock_client_cache(std::string xdst, class lock_release_user *l = 0);
-  virtual ~lock_client_cache() {};
+  virtual ~lock_client_cache();
   lock_protocol::status acquire(lock_protocol::lockid_t);
   lock_protocol::status release(lock_protocol::lockid_t);
   rlock_protocol::status revoke_handler(lock_protocol::lockid_t, 
