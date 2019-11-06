@@ -207,9 +207,14 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
     printf("create in dir %016llx %s\n", parent, name);
 
 	lc->acquire(parent);
-    if(__lookup(parent, name, found, ino_out) == extent_protocol::OK && found){
-        printf("create dup name\n");
+    if(__lookup(parent, name, found, ino_out) != extent_protocol::OK){
         r = IOERR;
+        goto release;
+    }
+
+    if(found){
+        printf("create dup name\n");
+        r = EXIST;
         goto release;
     }
 

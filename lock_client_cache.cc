@@ -108,7 +108,6 @@ lock_client_cache::revoke_handler(lock_protocol::lockid_t lid,
 {
   int r;
   int ret = rlock_protocol::OK;
-  usleep(100000);
   pthread_mutex_lock(&lockmutex);
   lockinfo *info = lockmap[lid];
   if (info->stat == FREE) {
