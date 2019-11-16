@@ -38,66 +38,59 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
   if (lockmap.find(lid) == lockmap.end())
     lockmap[lid] = new lockinfo();
   lockinfo *info = lockmap[lid];
-  thread *latest_thread = new thread();
+  pthread_cond_t* thread_cond = new pthread_cond_t;
+  pthread_cond_init(thread_cond, NULL);
 
-  if (info->thread_list.empty()){
-    state s = info->stat;
-    info->thread_list.push_back(latest_thread);
-    if (s == FREE){
-      info->stat = LOCKED;
-      pthread_mutex_unlock(&lockmutex);
-      return lock_protocol::OK;
-    } else if (s == NONE) {
-      return wait_lock(info, lid, latest_thread);
-    } else {
-      pthread_cond_wait(&latest_thread->cv, &lockmutex);
-      return wait_lock(info, lid, latest_thread);
-    }
-  } else {
-    info->thread_list.push_back(latest_thread);
-    pthread_cond_wait(&latest_thread->cv, &lockmutex);
-    switch (info->stat) {
-      case FREE:
-        info->stat = LOCKED;
-      case LOCKED:
+  // fairy
+  if (!info->thread_list.empty()){
+    info->thread_list.push_back(thread_cond);
+    pthread_cond_wait(thread_cond, &lockmutex);
+  } else 
+    info->thread_list.push_back(thread_cond);
+
+  while(true)
+    switch(info->stat){
+      case lockinfo::NONE:
+        while (true){
+          int ret = call_acquire(info, lid, thread_cond);
+          if (ret == lock_protocol::OK){
+            info->stat = lockinfo::LOCKED;
+            pthread_mutex_unlock(&lockmutex);
+            return lock_protocol::OK;
+          } else{
+            if (info->msg != lockinfo::RETRY) 
+              pthread_cond_wait(thread_cond, &lockmutex);
+            info->msg = lockinfo::EMPTY;
+          }
+        }
+      case lockinfo::FREE:
+        info->stat = lockinfo::LOCKED;
         pthread_mutex_unlock(&lockmutex);
         return lock_protocol::OK;
-      case NONE:
-        return wait_lock(info, lid, latest_thread);
       default:
-        assert(0);
+        pthread_cond_wait(thread_cond, &lockmutex);    
     }
-  }
 }
 
 lock_protocol::status
 lock_client_cache::release(lock_protocol::lockid_t lid)
 {
-  int r;
   int ret = rlock_protocol::OK;
-  bool revoked = false;
 
   pthread_mutex_lock(&lockmutex);
   lockinfo *info = lockmap[lid];
-  if (info->msg == REVOKE){
-    revoked = true;
-    info->stat = RELEASING;
-
-    pthread_mutex_unlock(&lockmutex);
-    ret = cl->call(lock_protocol::release, lid, id, r);
-    pthread_mutex_lock(&lockmutex);
-    info->msg = EMPTY;
-    info->stat = NONE;
+  if (info->msg == lockinfo::REVOKE){
+    ret = call_release(info, lid);
+    assert(ret == rlock_protocol::OK);
+    info->msg = lockinfo::EMPTY;
+    info->stat = lockinfo::NONE;
   } else
-    info->stat = FREE;
+    info->stat = lockinfo::FREE;
 
   delete info->thread_list.front();
   info->thread_list.pop_front();
-  if (info->thread_list.size() >= 1) {
-    if (!revoked)
-      info->stat = LOCKED;
-    pthread_cond_signal(&info->thread_list.front()->cv);
-  }
+  if (info->thread_list.size() >= 1)
+    pthread_cond_signal(info->thread_list.front());
   pthread_mutex_unlock(&lockmutex);
   return ret;
 }
@@ -106,20 +99,16 @@ rlock_protocol::status
 lock_client_cache::revoke_handler(lock_protocol::lockid_t lid, 
                                   int &)
 {
-  int r;
   int ret = rlock_protocol::OK;
   pthread_mutex_lock(&lockmutex);
   lockinfo *info = lockmap[lid];
-  if (info->stat == FREE) {
-    info->stat = RELEASING;
-    pthread_mutex_unlock(&lockmutex);
-    ret = cl->call(lock_protocol::release, lid, id, r);
-    pthread_mutex_lock(&lockmutex);
-    info->stat = NONE;
+  if (info->stat == lockinfo::FREE) {
+    ret = call_release(info, lid);
+    info->stat = lockinfo::NONE;
     if (info->thread_list.size() >= 1)
-      pthread_cond_signal(&info->thread_list.front()->cv);
+      pthread_cond_signal(info->thread_list.front());
   } else
-    info->msg = REVOKE;
+    info->msg = lockinfo::REVOKE;
   pthread_mutex_unlock(&lockmutex);
   return ret;
 }
@@ -131,33 +120,31 @@ lock_client_cache::retry_handler(lock_protocol::lockid_t lid,
   int ret = rlock_protocol::OK;
   pthread_mutex_lock(&lockmutex);
   lockinfo *info = lockmap[lid];
-  info->msg = RETRY;
-  pthread_cond_signal(&info->thread_list.front()->cv);
+  info->msg = lockinfo::RETRY;
+  pthread_cond_signal(info->thread_list.front());
   pthread_mutex_unlock(&lockmutex);
   return ret;
 }
 
 lock_protocol::status lock_client_cache::
-wait_lock(lock_client_cache::lockinfo *info,
+call_acquire(lock_client_cache::lockinfo *info,
               lock_protocol::lockid_t lid,
-              thread *latest_thread) {
+              pthread_cond_t *thread_cond) {
   int r;
-  info->stat = ACQUIRING;
-  while (info->stat == ACQUIRING){
-    pthread_mutex_unlock(&lockmutex);
-    int ret = cl->call(lock_protocol::acquire, lid, id, r);
-    pthread_mutex_lock(&lockmutex);
-    if (ret == lock_protocol::OK){
-      info->stat = LOCKED;
-      pthread_mutex_unlock(&lockmutex);
-      return lock_protocol::OK;
-    } else{
-      if (info->msg == EMPTY) 
-        pthread_cond_wait(&latest_thread->cv, &lockmutex);
-      info->msg = EMPTY;
-    }
-  }
-  assert(0);
+  info->stat = lockinfo::ACQUIRING;
+  pthread_mutex_unlock(&lockmutex);
+  int ret = cl->call(lock_protocol::acquire, lid, id, r);
+  pthread_mutex_lock(&lockmutex);
+  return ret;
+}
+
+lock_protocol::status lock_client_cache::call_release(lock_client_cache::lockinfo *info,lock_protocol::lockid_t lid) {
+  int r;
+  info->stat = lockinfo::RELEASING;
+  pthread_mutex_unlock(&lockmutex);
+  int ret = cl->call(lock_protocol::release, lid, id, r);
+  pthread_mutex_lock(&lockmutex);
+  return ret;
 }
 
 lock_client_cache::~lock_client_cache() {

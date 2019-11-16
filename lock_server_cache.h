@@ -14,20 +14,19 @@
 class lock_server_cache {
  private:
   int nacquire;
-  enum state
-  {
-    NONE,
-    LOCKED,
-    REVOKING,
-    RETRYING
-  };
 
   struct lockinfo
   {
     std::string owner;
     std::string retrying_cid;
     std::set<std::string> waiting_cids;
-    state stat;
+    enum state
+    {
+      NONE,
+      LOCKED,
+      REVOKING,
+      RETRYING
+    } stat;
   };
 
   std::map<lock_protocol::lockid_t, lockinfo *> lockmap;

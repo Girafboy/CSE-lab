@@ -27,33 +27,22 @@ class lock_client_cache : public lock_client {
   std::string hostname;
   std::string id;
 
-  enum message {
-    EMPTY,
-    RETRY,
-    REVOKE
-  };
-
-  enum state {
-    NONE,
-    FREE,
-    LOCKED,
-    ACQUIRING,
-    RELEASING
-  };
-
-
-  struct thread {
-    pthread_cond_t cv;
-    thread() {
-      pthread_cond_init(&cv, NULL);
-    }
-  };
-
   struct lockinfo {
-    state stat;
-    message msg;
-    std::list<thread *> thread_list;
+    enum message {
+      EMPTY,
+      RETRY,
+      REVOKE
+    } msg;
 
+    enum state {
+      NONE,
+      FREE,
+      LOCKED,
+      ACQUIRING,
+      RELEASING
+    } stat;
+
+    std::list<pthread_cond_t *> thread_list;
     lockinfo() {
       stat = NONE;
       msg = EMPTY;
@@ -62,10 +51,11 @@ class lock_client_cache : public lock_client {
 
   pthread_mutex_t lockmutex;
   std::map<lock_protocol::lockid_t, lockinfo *> lockmap;
-  lock_protocol::status wait_lock(lockinfo *,
+  lock_protocol::status call_acquire(lockinfo *,
                                     lock_protocol::lockid_t,
-                                    thread *latest_thread);
-  
+                                    pthread_cond_t *thread_cond);
+  lock_protocol::status call_release(lock_client_cache::lockinfo *info,lock_protocol::lockid_t lid);
+
  public:
   static int last_port;
   lock_client_cache(std::string xdst, class lock_release_user *l = 0);
