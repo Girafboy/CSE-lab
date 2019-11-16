@@ -22,6 +22,7 @@ class disk {
   disk();
   void read_block(uint32_t id, char *buf);
   void write_block(uint32_t id, const char *buf);
+  void print_status(uint32_t id);
 };
 
 // block layer -----------------------------------------
@@ -36,6 +37,7 @@ class block_manager {
  private:
   disk *d;
   std::map <uint32_t, int> using_blocks;
+  pthread_mutex_t bitmap_mutex;
  public:
   block_manager();
   struct superblock sb;
@@ -44,6 +46,7 @@ class block_manager {
   void free_block(uint32_t id);
   void read_block(uint32_t id, char *buf);
   void write_block(uint32_t id, const char *buf);
+  void print_status();
 };
 
 // inode layer -----------------------------------------
@@ -67,6 +70,7 @@ class block_manager {
 #define NINDIRECT (BLOCK_SIZE / sizeof(uint))
 #define MAXFILE (NDIRECT + NINDIRECT)
 
+#define FILEBLOCK IBLOCK(INODE_NUM, sb.nblocks) + 1
 typedef struct inode {
   short type;
   unsigned int size;
@@ -79,8 +83,11 @@ typedef struct inode {
 class inode_manager {
  private:
   block_manager *bm;
+  pthread_mutex_t inotable_mutex;
   struct inode* get_inode(uint32_t inum);
   void put_inode(uint32_t inum, struct inode *ino);
+  blockid_t get_nth_blockid(inode_t *ino, uint32_t n);
+  void alloc_nth_block(inode_t *ino, uint32_t n);
 
  public:
   inode_manager();

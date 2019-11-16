@@ -8,11 +8,16 @@
 #include "lock_protocol.h"
 #include "lock_client.h"
 #include "rpc.h"
+#include <map>
+#include <pthread.h>
 
 class lock_server {
 
  protected:
   int nacquire;
+  pthread_mutex_t mutex;
+  std::map<lock_protocol::lockid_t, pthread_cond_t> conds;
+  std::map<lock_protocol::lockid_t, bool> locks;
 
  public:
   lock_server();
