@@ -229,7 +229,7 @@ inode_manager::get_nth_blockid(inode_t *ino, uint32_t n)
   blockid_t res;
 
   assert(ino);
-  printf("\tim: get_nth_blockid %d\n", n);
+  // printf("\tim: get_nth_blockid %d\n", n);
   if(n < NDIRECT)
     res = ino->blocks[n];
   else if(n < MAXFILE){

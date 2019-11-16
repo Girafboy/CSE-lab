@@ -25,6 +25,8 @@ lock_protocol::status
 lock_server::acquire(int clt, lock_protocol::lockid_t lid, int &r)
 {
   lock_protocol::status ret = lock_protocol::OK;
+  printf("lock_server: acquire %lld\n", lid);
+
 	// Your lab2 part2 code goes here
   pthread_mutex_lock(&mutex);
   if(locks.find(lid) == locks.end()){
@@ -45,6 +47,8 @@ lock_protocol::status
 lock_server::release(int clt, lock_protocol::lockid_t lid, int &r)
 {
   lock_protocol::status ret = lock_protocol::OK;
+  printf("lock_server: release %lld\n", lid);
+
 	// Your lab2 part2 code goes here
   pthread_mutex_lock(&mutex);
   locks[lid] = false;

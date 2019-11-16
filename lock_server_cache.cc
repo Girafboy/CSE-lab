@@ -21,6 +21,8 @@ int lock_server_cache::acquire(lock_protocol::lockid_t lid, std::string id,
 {
   int r;
   lock_protocol::status ret = lock_protocol::OK;
+  
+  tprintf("lock_server_cache: acquire %lld %s\n", lid, id.c_str());
   pthread_mutex_lock(&lockmutex);
 
   if (lockmap.find(lid) == lockmap.end()){
@@ -87,6 +89,8 @@ lock_server_cache::release(lock_protocol::lockid_t lid, std::string id,
          int &r)
 {
   lock_protocol::status ret = lock_protocol::OK;
+  
+  tprintf("lock_server_cache: release %lld %s\n", lid, id.c_str());
   pthread_mutex_lock(&lockmutex);
   lockinfo *info = lockmap[lid];
   assert(info);
@@ -105,7 +109,7 @@ lock_server_cache::release(lock_protocol::lockid_t lid, std::string id,
 lock_protocol::status
 lock_server_cache::stat(lock_protocol::lockid_t lid, int &r)
 {
-  tprintf("stat request\n");
+  tprintf("lock_server_cache: stat %lld\n", lid);
   r = nacquire;
   return lock_protocol::OK;
 }

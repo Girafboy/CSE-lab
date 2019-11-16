@@ -12,7 +12,8 @@
 yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
 	ec = new extent_client(extent_dst);
-	lc = new lock_client_cache(lock_dst);
+	// lc = new lock_client(lock_dst);
+    lc = new lock_client_cache(lock_dst);
 
 	lc->acquire(1);
 	if (ec->put(1, "") != extent_protocol::OK)
@@ -42,7 +43,8 @@ bool
 yfs_client::isfile(inum inum)
 {
     extent_protocol::attr a;
-
+    
+    printf("\tyfs_client: isfile %lld\n", inum);
 	lc->acquire(inum);
     if (ec->getattr(inum, a) != extent_protocol::OK) {
         printf("error getting attr\n");
@@ -52,10 +54,10 @@ yfs_client::isfile(inum inum)
 	lc->release(inum);
 
     if (a.type == extent_protocol::T_FILE) {
-        printf("isfile: %lld is a file\n", inum);
+        printf("\t\tisfile: %lld is a file\n", inum);
         return true;
     } 
-    printf("isfile: %lld is not a file\n", inum);
+    printf("\t\tisfile: %lld is not a file\n", inum);
     return false;
 }
 /** Your code here for Lab...
@@ -69,6 +71,8 @@ yfs_client::isdir(inum inum)
 {
     extent_protocol::attr a;
     // Oops! is this still correct when you implement symlink?
+    
+    printf("\tyfs_client: isdir %lld\n", inum);
     lc->acquire(inum);
 	if (ec->getattr(inum, a) != extent_protocol::OK) {
         printf("error getting attr\n");
@@ -78,10 +82,10 @@ yfs_client::isdir(inum inum)
 	lc->release(inum);
 
     if (a.type == extent_protocol::T_DIR) {
-        printf("isdir: %lld is a dir\n", inum);
+        printf("\t\tisdir: %lld is a dir\n", inum);
         return true;
     }
-    printf("isdir: %lld is not a dir\n", inum);
+    printf("\t\tisdir: %lld is not a dir\n", inum);
     return false;
 }
 
@@ -89,6 +93,8 @@ bool
 yfs_client::issymlink(inum inum) {
     extent_protocol::attr a;
 
+
+    printf("\tyfs_client: issymlink %lld\n", inum);
 	lc->acquire(inum);
     if (ec->getattr(inum, a) != extent_protocol::OK) {
         printf("error getting attr\n");
@@ -98,10 +104,10 @@ yfs_client::issymlink(inum inum) {
 	lc->release(inum);
 
     if (a.type == extent_protocol::T_SYMLINK) {
-        printf("issymlink: %lld is a symlink\n", inum);
+        printf("\t\tissymlink: %lld is a symlink\n", inum);
         return true;
     }
-    printf("issymlink: %lld is not a symlink\n", inum);
+    printf("\t\tissymlink: %lld is not a symlink\n", inum);
     return false;
 }
 
@@ -109,9 +115,9 @@ int
 yfs_client::getfile(inum inum, fileinfo &fin)
 {
     int r = OK;
-    printf("getfile %016llx\n", inum);
     extent_protocol::attr a;
 	
+    printf("\tyfs_client: getfile %lld\n", inum);
 	lc->acquire(inum);
     if (ec->getattr(inum, a) != extent_protocol::OK) {
         r = IOERR;
@@ -122,7 +128,7 @@ yfs_client::getfile(inum inum, fileinfo &fin)
     fin.mtime = a.mtime;
     fin.ctime = a.ctime;
     fin.size = a.size;
-    printf("getfile %016llx -> sz %llu\n", inum, fin.size);
+    printf("\t\tgetfile %lld -> sz %llu\n", inum, fin.size);
 
 release:
 	lc->release(inum);
@@ -133,7 +139,8 @@ int
 yfs_client::getdir(inum inum, dirinfo &din)
 {
     int r = OK;
-    printf("getdir %016llx\n", inum);
+    
+    printf("\tyfs_client: getdir %lld\n", inum);
     extent_protocol::attr a;
 
 	lc->acquire(inum);
@@ -172,7 +179,8 @@ yfs_client::setattr(inum ino, size_t size)
      * note: get the content of inode ino, and modify its content
      * according to the size (<, =, or >) content length.
      */
-    printf("setattr %016llx\n", ino);
+    
+    printf("\tyfs_client: setattr %lld size of %ld\n", ino, size);
 	lc->acquire(ino);
     if (ec->get(ino, buf) != extent_protocol::OK) {
         r = IOERR;
@@ -204,8 +212,8 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
      * note: lookup is what you need to check if file exist;
      * after create file or dir, you must remember to modify the parent infomation.
      */
-    printf("create in dir %016llx %s\n", parent, name);
 
+    printf("\tyfs_client: create %lld %s\n", parent, name);
 	lc->acquire(parent);
     if(__lookup(parent, name, found, ino_out) != extent_protocol::OK){
         r = IOERR;
@@ -213,7 +221,7 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
     }
 
     if(found){
-        printf("create dup name\n");
+        printf("\t\terror create dup name\n");
         r = EXIST;
         goto release;
     }
@@ -259,12 +267,11 @@ yfs_client::mkdir(inum parent, const char *name, mode_t mode, inum &ino_out)
      * note: lookup is what you need to check if directory exist;
      * after create file or dir, you must remember to modify the parent infomation.
      */
-
-    printf("mkdir in dir %016llx %s\n", parent, name);
     
+    printf("\tyfs_client: mkdir %lld %s\n", parent, name);
 	lc->acquire(parent);
     if(__lookup(parent, name, found, ino_out) == extent_protocol::OK && found){
-        printf("create dup name\n");
+        printf("\t\t error create dup name\n");
         r = IOERR;
         goto release;
     }
@@ -302,6 +309,8 @@ int
 yfs_client::lookup(inum parent, const char *name, bool &found, inum &ino_out) 
 {
     int r = OK;
+    
+    printf("\tyfs_client: lookup %lld %s\n", parent, name);
 	// lc->acquire(parent);
     r = __lookup(parent, name, found, ino_out);
 	// lc->release(parent);
@@ -312,6 +321,8 @@ int
 yfs_client::readdir(inum dir, std::list<dirent> &list) 
 {
     int r = OK;
+    
+    printf("\tyfs_client: readdir %lld\n", dir);
 	lc->acquire(dir);
     r = __readdir(dir, list);
 	lc->release(dir);
@@ -327,8 +338,8 @@ yfs_client::read(inum ino, size_t size, off_t off, std::string &data)
      * your code goes here.
      * note: read using ec->get().
      */
-    printf("read %016llx sz %ld off %ld\n", ino, size, off);
-
+    
+    printf("\tyfs_client: read %lld size of %ld off %ld\n", ino, size, off);
 	lc->acquire(ino);
     if (ec->get(ino, buf) != extent_protocol::OK) {
         r = IOERR;
@@ -341,7 +352,7 @@ yfs_client::read(inum ino, size_t size, off_t off, std::string &data)
     if(size > buf.size())
         size = buf.size();
     data.assign(buf, off, size);
-    printf("read %s\n", data.c_str());
+    // printf("read %s\n", data.c_str());
 release:
 	lc->release(ino);
     return r;
@@ -357,8 +368,9 @@ yfs_client::write(inum ino, size_t size, off_t off, const char *data, size_t &by
      * note: write using ec->put().
      * when off > length of original file, fill the holes with '\0'.
      */
+    
+    printf("\tyfs_client: write %lld size of %ld off %ld\n", ino, size, off);
     assert(size);
-    printf("write %016llx sz %ld off %ld\n", ino, size, off);
 
 	lc->acquire(ino);
     if (ec->get(ino, buf) != extent_protocol::OK) {
@@ -379,7 +391,7 @@ yfs_client::write(inum ino, size_t size, off_t off, const char *data, size_t &by
         r = IOERR;
         goto release;
     }
-    printf("write %s\n", buf.c_str());
+    // printf("write %s\n", buf.c_str());
 
 release:
 	lc->release(ino);
@@ -399,11 +411,11 @@ int yfs_client::unlink(inum parent, const char *name)
      * note: you should remove the file using ec->remove,
      * and update the parent directory content.
      */
-    printf("unlink in dir %016llx %s\n", parent, name);
 
+    printf("\tyfs_client: unlink %lld %s\n", parent, name);
 	lc->acquire(parent);
     if(__lookup(parent, name, found, id) != extent_protocol::OK || !found){
-        printf("unlink empty name\n");
+        printf("\t\terror unlink empty name\n");
         r = NOENT;
         goto release;
     }
@@ -441,6 +453,7 @@ int yfs_client::readlink(inum ino, std::string &buf)
 {
     int r = OK;
 
+    printf("\tyfs_client: readlink %lld\n", ino);
 	lc->acquire(ino);
     if(ec->get(ino, buf) != extent_protocol::OK){
         r = IOERR;
@@ -459,6 +472,7 @@ yfs_client::symlink(inum parent, const char *name, const char *link, inum &ino_o
     struct dirent_n ent;
     std::string buf;
 
+    printf("\tyfs_client: symlink %lld %s %s\n", parent, name, link);
 	lc->acquire(parent);
     if(ec->get(parent, buf) != extent_protocol::OK){
         r = IOERR;
@@ -509,7 +523,7 @@ yfs_client::__lookup(inum parent, const char *name, bool &found, inum &ino_out)
      * you should design the format of directory content.
      */
 
-    printf("lookup in dir %016llx %s\n", parent, name);
+    printf("\t\tlookup in dir %lld %s\n", parent, name);
     if (ec->getattr(parent, a) != extent_protocol::OK) {
         r = IOERR;
         goto release;
@@ -548,7 +562,7 @@ yfs_client::__readdir(inum dir, std::list<dirent> &list)
      * note: you should parse the dirctory content using your defined format,
      * and push the dirents to the list.
      */
-    printf("readdir in dir %016llx\n", dir);
+    printf("\t\treaddir in dir %lld\n", dir);
 
     if (ec->getattr(dir, a) != extent_protocol::OK) {
         r = IOERR;
