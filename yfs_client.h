@@ -8,12 +8,15 @@
 #include "lock_client_cache.h"
 
 //#include "yfs_protocol.h"
-#include "extent_client.h"
+#include "extent_protocol.h"
+// #include "extent_client.h"
+#include "extent_client_cache.h"
 #include <vector>
 
 
 class yfs_client {
-  extent_client *ec;
+  // extent_client *ec;
+  extent_client_cache *ec;
   // lock_client *lc;
   lock_client_cache *lc;
  public:

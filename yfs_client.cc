@@ -1,6 +1,5 @@
 // yfs client.  implements FS operations using extent and lock server
 #include "yfs_client.h"
-#include "extent_client.h"
 #include <sstream>
 #include <iostream>
 #include <stdio.h>
@@ -11,7 +10,8 @@
 
 yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
-	ec = new extent_client(extent_dst);
+	// ec = new extent_client(extent_dst);
+    ec = new extent_client_cache(extent_dst);
 	// lc = new lock_client(lock_dst);
     lc = new lock_client_cache(lock_dst);
 

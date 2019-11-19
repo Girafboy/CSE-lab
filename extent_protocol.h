@@ -15,7 +15,10 @@ class extent_protocol {
     get,
     getattr,
     remove,
-    create
+    create,
+
+    pull = 0x5001,
+    push
   };
 
   enum types {

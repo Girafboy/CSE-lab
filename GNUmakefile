@@ -102,9 +102,15 @@ endif
 ifeq ($(LAB3GE),1)
   yfs_client += lock_client_cache.cc
 endif
+ifeq ($(LAB4GE),1)
+  yfs_client += extent_client_cache.cc
+endif 
 yfs_client : $(patsubst %.cc,%.o,$(yfs_client)) rpc/$(RPCLIB)
 
 extent_server=extent_server.cc extent_smain.cc inode_manager.cc
+ifeq ($(LAB3GE),1)
+  extent_server+=extent_server_cache.cc handle.cc
+endif
 extent_server : $(patsubst %.cc,%.o,$(extent_server)) rpc/$(RPCLIB)
 
 test-lab2-part1-b=test-lab2-part1-b.c
