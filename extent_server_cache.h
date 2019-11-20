@@ -13,10 +13,12 @@ class extent_server_cache {
   inode_manager *im;
 
   struct fileinfo {
+    std::string working_cid;
     std::set<std::string> cached_cids;
     fileinfo(){}
   };
   std::map<extent_protocol::extentid_t, fileinfo *> filemap; 
+  // pthread_mutex_t extentmutex;
 
   void notify(extent_protocol::extentid_t id, std::string cid);
   void require(extent_protocol::extentid_t id, std::string cid);

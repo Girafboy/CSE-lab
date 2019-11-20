@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include "handle.h"
+#include "tprintf.h"
 
 extent_server_cache::extent_server_cache() 
 {
@@ -25,7 +26,7 @@ extent_server_cache::~extent_server_cache()
 int extent_server_cache::create(uint32_t type, std::string cid, extent_protocol::extentid_t &id)
 {
   // alloc a new inode and return inum
-  printf("extent_server_cache: create inode type %d\n", type);
+  tprintf("extent_server_cache: create inode type %d from %s\n", type, cid.c_str());
   id = im->alloc_inode(type);
 	
 	assert(filemap[id] == NULL);
@@ -36,7 +37,7 @@ int extent_server_cache::create(uint32_t type, std::string cid, extent_protocol:
 
 int extent_server_cache::put(extent_protocol::extentid_t id, std::string cid, std::string buf, int &)
 {
-  printf("extent_server_cache: put %lld\n", id);
+  tprintf("extent_server_cache: put %lld from %s\n", id, cid.c_str());
   id &= 0x7fffffff;
   
   const char * cbuf = buf.c_str();
@@ -45,19 +46,21 @@ int extent_server_cache::put(extent_protocol::extentid_t id, std::string cid, st
   
 	assert(filemap[id]);
 	filemap[id]->cached_cids.insert(cid);
+	filemap[id]->working_cid = cid;
 	notify(id, cid);
   return extent_protocol::OK;
 }
 
 int extent_server_cache::get(extent_protocol::extentid_t id, std::string cid, std::string &buf)
 {
-  printf("extent_server_cache: get %lld\n", id);
+  tprintf("extent_server_cache: get %lld from %s\n", id, cid.c_str());
 
   id &= 0x7fffffff;
 
   int size = 0;
   char *cbuf = NULL;
 
+	require(id, cid);
   im->read_file(id, &cbuf, &size);
   if (size == 0)
     buf = "";
@@ -68,40 +71,47 @@ int extent_server_cache::get(extent_protocol::extentid_t id, std::string cid, st
 
 	assert(filemap[id]);
 	filemap[id]->cached_cids.insert(cid);
+	if(!filemap[id]->working_cid.empty())
+		notify(id, cid);
   return extent_protocol::OK;
 }
 
 int extent_server_cache::getattr(extent_protocol::extentid_t id, std::string cid, extent_protocol::attr &a)
 {
-  printf("extent_server_cache: getattr %lld\n", id);
+  tprintf("extent_server_cache: getattr %lld from %s\n", id, cid.c_str());
 
   id &= 0x7fffffff;
-  
   extent_protocol::attr attr;
   memset(&attr, 0, sizeof(attr));
+
+	require(id, cid);
   im->getattr(id, attr);
   a = attr;
 
 	assert(filemap[id]);
 	filemap[id]->cached_cids.insert(cid);
+	if(!filemap[id]->working_cid.empty())
+		notify(id, cid);
   return extent_protocol::OK;
 }
 
 int extent_server_cache::remove(extent_protocol::extentid_t id, std::string cid, int &)
 {
-  printf("extent_server_cache: remove %lld\n", id);
-
+  tprintf("extent_server_cache: remove %lld from %s\n", id, cid.c_str());
   id &= 0x7fffffff;
+
   im->remove_file(id);
 
 	notify(id, cid);
-  return extent_protocol::OK;
+	delete filemap[id];
+	filemap.erase(filemap.find(id));
+  return extent_protocol::OK;	
 }
 
 void extent_server_cache::notify(extent_protocol::extentid_t id, std::string cid)
 {
 	int r;
-  printf("extent_server_cache: notify %lld\n", id);
+  tprintf("extent_server_cache: notify %lld\n", id);
 
 	if(!filemap[id])
 		return;
@@ -110,7 +120,23 @@ void extent_server_cache::notify(extent_protocol::extentid_t id, std::string cid
 
 	for(std::set<std::string>::iterator it = filemap[id]->cached_cids.begin(); it != filemap[id]->cached_cids.end(); it ++)
 		if(cid != *it){
-			printf("\taccepter: %s\n", it->c_str());
+			tprintf("\tnotify_accepter: %s\n", it->c_str());
+			if(*it == filemap[id]->working_cid)
+				filemap[id]->working_cid.clear();
 			handle(*it).safebind()->call(extent_protocol::pull, id, r);
 		}
+}
+
+void extent_server_cache::require(extent_protocol::extentid_t id, std::string cid)
+{
+	int r;
+  tprintf("extent_server_cache: require %lld\n", id);
+
+	if(!filemap[id])
+		return;
+	if(filemap[id]->working_cid.empty())
+		return;
+
+	tprintf("\trequire_accepter: %s\n", filemap[id]->working_cid.c_str());
+	handle(filemap[id]->working_cid).safebind()->call(extent_protocol::push, id, r);
 }
