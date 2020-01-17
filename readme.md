@@ -1,5 +1,0 @@
-# CSE-lab (You can get labs in branches)
-- [lab1 ***Basic File System***](../../tree/lab1)
-- [lab2 ***RPC and Lock Server***](../../tree/lab2)
-- [lab3 ***Cache for Locks***](../../tree/lab3)
-- [lab4 ***Cache for Data***](../../tree/lab4)
